@@ -15,6 +15,7 @@ from pathlib import Path
 from src.data.load_data import load_city_tag_h3, load_grouped_city
 import numpy as np
 from typing import Dict
+import gc
 
 def h3_to_polygon(hex: int) -> Polygon:
     boundary = h3.h3_to_geo_boundary(hex)
@@ -86,7 +87,7 @@ def get_hexes_polygons_for_city(
     bounding_gdf = get_bounding_gdf(city)
 
     if type(bounding_gdf.geometry[0]) == MultiPolygon:
-        bounding_gdf = bounding_gdf.explode().reset_index(drop=True)
+        bounding_gdf = bounding_gdf.explode(index_parts=False).reset_index(drop=True)
 
     hexes_gdf = get_hexes_for_place(bounding_gdf, resolution, return_gdf=True)
     hexes_gdf.to_file(cache_file, driver="GeoJSON")
@@ -94,11 +95,11 @@ def get_hexes_polygons_for_city(
 
 
 def add_h3_indices(gdf: GeoDataFrame, city: Union[str, List[str]], resolution: int) -> GeoDataFrame:
-    hexes_polygons_gdf = get_hexes_polygons_for_city(city, resolution)
-    h3_added = gpd.sjoin(gdf, hexes_polygons_gdf, how="inner", op="intersects")
+    hexes_polygons_gdf = get_hexes_polygons_for_city(city, resolution, use_cache=True)
+    h3_added = gpd.sjoin(gdf, hexes_polygons_gdf, how="inner", predicate="intersects")
     return h3_added
 
-def add_h3_indices_to_city(city: Union[str, List[str]], resolution: int):
+def add_h3_indices_to_city(city: Union[str, List[str]], resolution: int, force=False):
     if type(city) == str:
         city_name = city
     else:
@@ -106,11 +107,18 @@ def add_h3_indices_to_city(city: Union[str, List[str]], resolution: int):
 
     city_destination_path = prepare_city_path(DATA_INTERIM_DIR, city_name)
     for tag in TOP_LEVEL_OSM_TAGS:
+        # try and free some memory
+        gc.collect()
+        # check if file already exists
+        result_path = city_destination_path.joinpath(f"{tag}_{resolution}.pkl")
+        if result_path.exists() and not force:
+            print(f"Skipping {tag} for {city_name}, already exists")
+            continue
+        
         tag_gdf = load_city_tag(city_name, tag)
         if tag_gdf is not None:
-            tag_gdf = tag_gdf[['unique_id', tag, 'geometry']]
+            tag_gdf = tag_gdf[['osmid', tag, 'geometry']]
             h3_gdf = add_h3_indices(tag_gdf, city, resolution)
-            result_path = city_destination_path.joinpath(f"{tag}_{resolution}.pkl")
             h3_gdf.to_pickle(result_path)
         else:
             print(f"Tag {tag} doesn't exist for city {city}, skipping...")

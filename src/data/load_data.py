@@ -15,7 +15,7 @@ def load_gdf(path: Path, crs="EPSG:4326") -> GeoDataFrame:
 def load_city_tag(city: str, tag: str, split_values=True, filter_values: Dict[str, str] = None) -> GeoDataFrame:
     path = DATA_RAW_DIR.joinpath(city, f"{tag}.pkl")
     if path.exists():
-        gdf = load_gdf(path)
+        gdf = load_gdf(path).reset_index()
         if split_values:
             gdf[tag] = gdf[tag].str.split(';')
             gdf = gdf.explode(tag)

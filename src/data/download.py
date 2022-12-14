@@ -1,6 +1,7 @@
 import osmnx as ox
 from shapely import wkt
 from geopandas import GeoDataFrame
+import pandas as pd
 from typing import Union, Dict, List
 from pathlib import Path
 from tqdm import tqdm
@@ -31,12 +32,22 @@ def download_whole_city(city_name: Union[str, List[str]], save_path: Path, timeo
     area_path.mkdir(parents=True, exist_ok=True)
     for tag in tqdm(TOP_LEVEL_OSM_TAGS):
         tag_path = area_path.joinpath(tag + ".pkl")
-        if not tag_path.exists():
-            tag_gdf = download_whole_osm_tag(city_name, tag, timeout)
-            if tag_gdf.empty:
+        # try opening the pickle (in case of corrupted file)
+        tag_exists = False
+        if tag_path.exists():
+            tag_exists = True
+            
+        if not tag_exists:
+            if (tag_path.parent /  f"{tag}_is_empty.txt").exists():
                 print(f"Tag: {tag} empty for city: {city_name}")
             else:
-                tag_gdf.to_pickle(tag_path)
+                tag_gdf = download_whole_osm_tag(city_name, tag, timeout)
+                if tag_gdf.empty:
+                    print(f"Tag: {tag} empty for city: {city_name}")
+                    with open(tag_path.parent / f"{tag}_is_empty.txt", 'w') as f:
+                        pass
+                else:
+                    tag_gdf.to_pickle(tag_path)
         else:
             print(f"Tag: {tag} exists for city: {city_name}")
 
