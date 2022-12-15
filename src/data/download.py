@@ -22,7 +22,7 @@ def ensure_geometry_type(
     return df
 
 
-def download_whole_city(city_name: Union[str, List[str]], save_path: Path, timeout: int = 10000):
+def download_whole_city(city_name: Union[str, List[str]], save_path: Path, timeout: int = 10000, tags: List[str] = TOP_LEVEL_OSM_TAGS):
     if type(city_name) == str:
         name = city_name
     else:
@@ -30,24 +30,22 @@ def download_whole_city(city_name: Union[str, List[str]], save_path: Path, timeo
     print(name)
     area_path = save_path.joinpath(name)
     area_path.mkdir(parents=True, exist_ok=True)
-    for tag in tqdm(TOP_LEVEL_OSM_TAGS):
-        tag_path = area_path.joinpath(tag + ".pkl")
-        # try opening the pickle (in case of corrupted file)
-        tag_exists = False
-        if tag_path.exists():
-            tag_exists = True
-            
-        if not tag_exists:
+    for tag in tqdm(tags):
+        tag_path = area_path.joinpath(tag + ".feather")
+        if not tag_path.exists():
             if (tag_path.parent /  f"{tag}_is_empty.txt").exists():
                 print(f"Tag: {tag} empty for city: {city_name}")
             else:
                 tag_gdf = download_whole_osm_tag(city_name, tag, timeout)
                 if tag_gdf.empty:
+                    # create a file holding whether the 
                     print(f"Tag: {tag} empty for city: {city_name}")
-                    with open(tag_path.parent / f"{tag}_is_empty.txt", 'w') as f:
+                    with open(tag_path.parent / f"{tag}_is_empty.txt", 'w'):
                         pass
                 else:
-                    tag_gdf.to_pickle(tag_path)
+                    tag_gdf.reset_index(inplace=True)
+                    tag_gdf.drop(columns=tag_gdf.columns.intersection(['nodes', 'ways']), inplace=True)
+                    tag_gdf.to_feather(tag_path)
         else:
             print(f"Tag: {tag} exists for city: {city_name}")
 
