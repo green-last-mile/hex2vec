@@ -19,16 +19,12 @@ class H3ServiceNeighbors(Dataset):
 
         self.positive_indexes = {}
         i = 0
-        for _, (h3_inds, h3s)  in tqdm(grouped_df.items(), total=len(grouped_df)):
+        for _, (h3_inds, h3s) in tqdm(grouped_df.items(), total=len(grouped_df)):
             for h3_index in h3s:
-                available_neighbors_h3 = [
-                    _h for _h in h3s if _h != h3_index
-                ]
+                available_neighbors_h3 = [_h for _h in h3s if _h != h3_index]
 
                 contexts_indexes = [
-                    _i for _i, _h in
-                    zip(h3_inds, h3s)
-                    if _h in available_neighbors_h3
+                    _i for _i, _h in zip(h3_inds, h3s) if _h in available_neighbors_h3
                 ]
 
                 # add in the neighbors of h3_index

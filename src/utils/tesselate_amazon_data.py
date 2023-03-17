@@ -33,6 +33,7 @@ from ..data.make_dataset import h3_to_polygon
 from ..settings import DATA_RAW_DIR
 from src.utils.advanced_tags import Tag
 
+
 # chunk list
 def chunker_list(seq, size):
     return (seq[i::size] for i in range(size))
@@ -67,7 +68,6 @@ def cover_point_array_w_hex(
     resolution: int,
     epgs: int = 32633,
 ) -> Set[str]:
-
     xy = geometry_series_to_xy(point_array, epgs=epgs)
     print("computing alpha shape, this may take a while...")
     res = alphashape.alphashape(xy, alpha=0.001)
@@ -114,7 +114,6 @@ def pull_hex_tags_synch(
     simplify_data: bool = True,
     force_pull: bool = False,
 ) -> pd.Series:
-
     # make the directory
     hex_dir = city_dir.joinpath(row["h3"])
     hex_dir.mkdir(parents=True, exist_ok=True)
@@ -146,7 +145,6 @@ async def walk_n_queue(
     resolution: int,
     force_pull: bool = False,
 ) -> None:
-
     force_pull = True
 
     r_dir = city_dir.joinpath(f"resolution_{resolution}")
@@ -162,7 +160,9 @@ async def walk_n_queue(
                 )
                 or force_pull
             ):
-                await queue.put((hex_dir.joinpath(f"{tag.osmxtag}.pkl"), row.geometry, tag))
+                await queue.put(
+                    (hex_dir.joinpath(f"{tag.osmxtag}.pkl"), row.geometry, tag)
+                )
                 await asyncio.sleep(0)
 
 
@@ -170,7 +170,7 @@ async def pull_tags_for_hex(queue: asyncio.Queue, semaphore: asyncio.Semaphore):
     async with semaphore:
         while True:
             # this is probs bad practice
-            save_path, geom, tag  = await queue.get()
+            save_path, geom, tag = await queue.get()
             print(
                 f"pulling {save_path.parent.parent.parent.stem}/{save_path.parent.stem}/{tag.osmxtag}"
             )
@@ -178,9 +178,7 @@ async def pull_tags_for_hex(queue: asyncio.Queue, semaphore: asyncio.Semaphore):
             # clean the data
             if not gdf.empty:
                 gdf = ensure_geometry_type(gdf)
-                gdf = (
-                    tag.extract_osmnx_tag(gdf.reset_index())
-                )
+                gdf = tag.extract_osmnx_tag(gdf.reset_index())
                 # save the gdf
                 gdf.to_pickle(save_path.absolute())
                 print(
@@ -189,7 +187,8 @@ async def pull_tags_for_hex(queue: asyncio.Queue, semaphore: asyncio.Semaphore):
             else:
                 # record that the df is empty so we don't try again
                 with open(
-                    save_path.parent.joinpath(f"{tag.osmxtag}_is_empty.txt").absolute(), "w"
+                    save_path.parent.joinpath(f"{tag.osmxtag}_is_empty.txt").absolute(),
+                    "w",
                 ) as f:
                     pass
             # tell everyon the that the task is done
@@ -204,7 +203,6 @@ async def pull_tags_for_hex_gdf(
     simplify_data: bool = True,
     force_pull: bool = False,
 ) -> None:
-
     # make the directory
     r_dir = city_dir.joinpath(f"resolution_{resolution}")
     r_dir.mkdir(parents=True, exist_ok=True)
@@ -221,7 +219,6 @@ def join_hex_dfs(
     output_dir: Path,
     force_overwrite: bool = False,
 ) -> None:
-
     # create a map of smaller hexes to larger hexes
     for hex_id in tqdm(list(iterate_hex_dir(hex_parent_dir))):
         # create a hexagon gpd
@@ -305,7 +302,6 @@ def _map_2_small_hex(
                 tag_dfs.append(tag_gdf)
 
         if len(tag_dfs):
-
             # create a hex + neighbors super df
             tag_gdf = pd.concat(tag_dfs, axis=0)
             # convert tag_gdf to dask-gdf
@@ -318,7 +314,7 @@ def _map_2_small_hex(
             for part in tag_gdf.partitions:
                 dfs.append(
                     tag.sjoin(
-                        hexes_gdf=hexes_gdf, 
+                        hexes_gdf=hexes_gdf,
                         tag_gdf=part,
                     )
                 )
@@ -381,9 +377,7 @@ def group_hex_tags(
     output_dir: Path,
     resolution: int,
 ) -> None:
-
     for hex_id in tqdm(list(iterate_hex_dir(hex_parent_dir))):
-
         # print(hex_id.stem)
         h3_grouped_df = group_h3_tags(
             hex_id=hex_id.stem,
@@ -440,7 +434,6 @@ def create_city_from_hex(
     drop_all_zero=True,
     tags: List[Tag] = None,
 ) -> None:
-
     import pyarrow.feather as feather
 
     if NO_POLARS:
@@ -590,7 +583,6 @@ def fetch_city_h3s(
         # return city_boundary_geojson
 
     except (IndexError, KeyError) as e:
-
         raise Exception(
             f"OSMNX did not find a boundary geometry for {city_name}"
         ) from e

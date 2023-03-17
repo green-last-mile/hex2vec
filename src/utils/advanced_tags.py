@@ -26,8 +26,6 @@ import pyproj
 #         ),
 #     )
 
-    
-
 
 def feet_and_inches_to_meters(x):
     # Use regular expressions to extract the feet and inches values from the string
@@ -76,7 +74,9 @@ class Tag:
         self._simplify_raw = True
 
     @property
-    def keep_columns(self, ) -> List[str]:
+    def keep_columns(
+        self,
+    ) -> List[str]:
         return ["osmid", self.osmxtag, "geometry"]
 
     def __str__(self) -> str:
@@ -147,7 +147,11 @@ class Tag:
         tag_gdf,
     ):
         """Spatial join between hexagons and tag_gdf"""
-        return tag_gdf.sjoin(hexes_gdf, how="inner", predicate="intersects",).compute()[
+        return tag_gdf.sjoin(
+            hexes_gdf,
+            how="inner",
+            predicate="intersects",
+        ).compute()[
             [
                 "h3",
                 "osmid",
@@ -240,7 +244,7 @@ class ParkingArea(Tag):
     @property
     def osmxtag(self) -> str:
         return "amenity"
-    
+
     def _create_area_column(self, df):
         # create the area column
         # convert the crs to meters
@@ -298,25 +302,25 @@ class HighwayArea(BuildingArea):
         super().__init__(tag, *args, **kwargs)
         self.geom_required = True
         self._filter_values = {
-            'residential',
-            'tertiary',
-            'trunk',
-            'primary',
-            'secondary',
-            'highway',
-            'motorway',
-            'service'
+            "residential",
+            "tertiary",
+            "trunk",
+            "primary",
+            "secondary",
+            "highway",
+            "motorway",
+            "service",
         }
 
         self._width_map = {
-            'residential' : 10,
-            'tertiary': 10,
-            'trunk': 10,
-            'primary': 10,
-            'secondary': 10,
-            'highway': 10,
-            'motorway': 10,
-            'service': 10
+            "residential": 10,
+            "tertiary": 10,
+            "trunk": 10,
+            "primary": 10,
+            "secondary": 10,
+            "highway": 10,
+            "motorway": 10,
+            "service": 10,
         }
 
         self._simplify_raw = False
@@ -324,21 +328,23 @@ class HighwayArea(BuildingArea):
     @property
     def osmxtag(self) -> str:
         return "highway"
-    
+
     @staticmethod
     def _width_fixer(x: str, feet_prob: bool = False) -> float:
         try:
             # write regex to remove all non-numeric characters or characters that are not a period, "'", ''', or a space. terminate on a ;
             # see if ";" is in the string, is so, apply _width_fixer to all the values
             # replace all " "  with ""
-            x = x.replace(' ', '')
-            if ';' in x:
-                return sum([HighwayArea._width_fixer(y, feet_prob=True) for y in x.split(';')])
-            x = re.sub(r'[^0-9\.\'\"\sm]', '', x)
+            x = x.replace(" ", "")
+            if ";" in x:
+                return sum(
+                    [HighwayArea._width_fixer(y, feet_prob=True) for y in x.split(";")]
+                )
+            x = re.sub(r"[^0-9\.\'\"\sm]", "", x)
             if ('"' in x) or ("'" in x):
                 return feet_and_inches_to_meters(x)
-            if 'm' in x:
-                return float(x.replace('m', ''))
+            if "m" in x:
+                return float(x.replace("m", ""))
             return feet_or_meters(float(x)) if not feet_prob else float(x) * 0.3048
         except:
             print(x)
@@ -347,37 +353,52 @@ class HighwayArea(BuildingArea):
     @staticmethod
     def _lane_fixer(x: str) -> float:
         try:
-            if ';' in x:
-                return sum([HighwayArea._lane_fixer(y) for y in x.split(';')])
+            if ";" in x:
+                return sum([HighwayArea._lane_fixer(y) for y in x.split(";")])
             return float(x)
         except:
-            return 0        
+            return 0
 
     def _add_area(self, df):
         # get the utm zone
         zone = df.geometry.estimate_utm_crs()
-        df['utm_geom'] = df.geometry.to_crs(zone)
-        
+        df["utm_geom"] = df.geometry.to_crs(zone)
+
         # add a width column
         # print(df['width'].value_counts())
-        df['meter_width'] = 0
+        df["meter_width"] = 0
 
-        null_width = robust_null_checker(df['width'])
-        df.loc[~null_width, 'meter_width'] = df.loc[~null_width, 'width'].apply(self._width_fixer).astype('float')
+        null_width = robust_null_checker(df["width"])
+        df.loc[~null_width, "meter_width"] = (
+            df.loc[~null_width, "width"].apply(self._width_fixer).astype("float")
+        )
         # where the width is not set, try the lane count * the average width of a lane
-        null_lanes = robust_null_checker(df['lanes'])
-        df.loc[(~null_lanes & null_width), 'meter_width'] = df.loc[(~null_lanes & null_width), 'lanes'].apply(self._lane_fixer).astype('float') * 3.5
+        null_lanes = robust_null_checker(df["lanes"])
+        df.loc[(~null_lanes & null_width), "meter_width"] = (
+            df.loc[(~null_lanes & null_width), "lanes"]
+            .apply(self._lane_fixer)
+            .astype("float")
+            * 3.5
+        )
         # where the width is still not set, try the highway type
-        width_map = df[df['meter_width'] > 0].groupby('highway')['meter_width'].mean().to_dict()
+        width_map = (
+            df[df["meter_width"] > 0].groupby("highway")["meter_width"].mean().to_dict()
+        )
         for k, v in self._width_map.items():
             if k not in width_map:
                 width_map[k] = v
-        df.loc[df['meter_width'] == 0, 'meter_width'] = df.loc[df['meter_width'] == 0, 'highway'].map(width_map)
+        df.loc[df["meter_width"] == 0, "meter_width"] = df.loc[
+            df["meter_width"] == 0, "highway"
+        ].map(width_map)
 
         # buffer the geometry by the width, with a flat cap
-        df['geometry'] = df['utm_geom'].buffer(df['meter_width'] / 2, cap_style=2).to_crs(df.geometry.crs)
+        df["geometry"] = (
+            df["utm_geom"]
+            .buffer(df["meter_width"] / 2, cap_style=2)
+            .to_crs(df.geometry.crs)
+        )
 
-        return df[['osmid', 'highway', 'geometry']]
+        return df[["osmid", "highway", "geometry"]]
 
     def sjoin(
         self,
@@ -403,23 +424,32 @@ class HighwayArea(BuildingArea):
                 tag_gdf["geometry"].geom_type.isin(["Polygon", "MultiPolygon"])
             ]
 
-
         return gpd.overlay(tag_gdf, hexes_gdf, how="intersection")
-    
+
     def extract_osmnx_tag(self, df_raw: pd.DataFrame, *args, **kwargs) -> pd.DataFrame:
-        df_raw = df_raw[["osmid", self.osmxtag, "geometry", *df_raw.columns.intersection(['width', 'lanes'])]]
+        df_raw = df_raw[
+            [
+                "osmid",
+                self.osmxtag,
+                "geometry",
+                *df_raw.columns.intersection(["width", "lanes"]),
+            ]
+        ]
         return df_raw
 
     @property
-    def keep_columns(self, ) -> List[str]:
-        return super().keep_columns + ['width', 'lanes']
-
+    def keep_columns(
+        self,
+    ) -> List[str]:
+        return super().keep_columns + ["width", "lanes"]
 
 
 def build_tag(tag: str, *args, **kwargs) -> Tag:
     try:
-        return {"building.area": BuildingArea, "parking.area": ParkingArea, "highway.area": HighwayArea}[
-            tag
-        ](tag, *args, **kwargs)
+        return {
+            "building.area": BuildingArea,
+            "parking.area": ParkingArea,
+            "highway.area": HighwayArea,
+        }[tag](tag, *args, **kwargs)
     except KeyError:
         return Tag(tag, *args, **kwargs)

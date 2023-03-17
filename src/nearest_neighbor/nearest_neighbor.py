@@ -189,7 +189,6 @@ class NearestNeighbor:
 
     # #  below comes from https://autogis-site.readthedocs.io/en/latest/notebooks/L3/06_nearest-neighbor-faster.html
     def get_nearest(self, src_points, candidates, hex_id):
-
         # Create tree from the candidate points
         tree = self._compose_tree(hex_id, candidates)
 

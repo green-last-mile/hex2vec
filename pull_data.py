@@ -188,6 +188,7 @@ def transform_city(interim_dir, output_dir, raw_resolution, c, res, tags, force)
     # have to do this because Joblib expects a return
     return 1
 
+
 @click.command()
 @click.argument("city")
 def run():
@@ -210,7 +211,6 @@ def add_h3_indices(
     data_dir: Path,
     resolution: int,
 ):
-
     data_dir = _check_dir_exists(data_dir)
     interem_dir = data_dir / "intermediate"
     for city in _iter_cities(data_dir):
@@ -290,7 +290,6 @@ def group_all_city_tags(
 async def _pull_hex_gdf(
     latlon_df: pd.DataFrame, data_dir: Path, tag_list: List[Tag], level: int
 ) -> None:
-
     # create a queue of needed files
     q = asyncio.Queue()
     s = asyncio.Semaphore(200)
@@ -380,7 +379,6 @@ def pull_all(output_dir, latlon_csv, city, city_file, level, convex_hull, tag) -
         # buffer by one neighbor, everywhere (this includes gaps, holes, etx)
         dfs = []
         for c, group_df in latlon.groupby("city"):
-
             # get the required hexagons
             h3s = set(group_df["h3"].values)
 
@@ -431,7 +429,6 @@ def pull_all(output_dir, latlon_csv, city, city_file, level, convex_hull, tag) -
 
     # handle the city file
     if city_file:
-
         with open(city_file, "r") as f:
             _d = json.load(f)
             # why didn't I make this plural....
@@ -442,7 +439,6 @@ def pull_all(output_dir, latlon_csv, city, city_file, level, convex_hull, tag) -
 
         dfs = []
         for c in city:
-
             # cover the city polygon with hexes
             desired_h3s = fetch_city_h3s(c, convex_hull=convex_hull, res=level)
 
