@@ -70,7 +70,7 @@ class GeoVeXLoss(nn.Module):
 
 class HexagonalConv2d(nn.Module):
     def __init__(
-        self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, bias=True
+        self, in_channels, out_channels, kernel_size=3, stride=2, padding=0, bias=True
     ):
         super(HexagonalConv2d, self).__init__()
         self.conv = nn.Conv2d(
@@ -94,7 +94,7 @@ class HexagonalConvTranspose2d(nn.Module):
         in_channels,
         out_channels,
         kernel_size=3,
-        stride=1,
+        stride=2,
         padding=0,
         output_padding=0,
         bias=True,
@@ -138,23 +138,27 @@ class GeoVexModel(pl.LightningModule):
         self.R = R
         self.lr = lr
 
+        num_conv = 2
+        lin_size = self.R // (2 ** num_conv)
+
         self.encoder = nn.Sequential(
             nn.BatchNorm2d(self.k_dim),
             nn.ReLU(),
-            HexagonalConv2d(self.k_dim, 256, kernel_size=3),
-            # HexagonalConv2d(512, 256, kernel_size=3),
-            HexagonalConv2d(256, 128, kernel_size=3),
+            HexagonalConv2d(self.k_dim, 256, kernel_size=3, stride=1),
+            HexagonalConv2d(256, 512, kernel_size=3, stride=2),
+            HexagonalConv2d(512, 1024, kernel_size=3, stride=2),
             nn.Flatten(),
             # TODO: make this a function of R
-            nn.Linear(5 * 5 * 128, 32),
+            nn.Linear(lin_size * lin_size * 1024, 32),
         )
 
         self.decoder = nn.Sequential(
-            nn.Linear(32, 5 * 5 * 128),
+            nn.Linear(32, lin_size * lin_size * 1024),
             # maintain the batch size, but reshape the rest
-            Reshape((-1, 128, 5, 5)),
-            HexagonalConvTranspose2d(128, 256, kernel_size=3),
-            HexagonalConvTranspose2d(256, self.k_dim, kernel_size=3),
+            Reshape((-1, 1024, lin_size, lin_size)),
+            HexagonalConvTranspose2d(1024, 512, kernel_size=3, stride=2),
+            HexagonalConvTranspose2d(512, 256, kernel_size=3, stride=2),
+            HexagonalConvTranspose2d(256, self.k_dim, kernel_size=3, stride=1),
             GeoVeXZIP(),
         )
 
