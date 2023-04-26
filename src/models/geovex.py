@@ -7,7 +7,9 @@ from typing import List, Tuple
 from torchmetrics.functional import f1_score as f1
 
 
-# TODO! This is incomplete
+# This is based on https://openreview.net/forum?id=7bvWopYY1H
+
+
 class GeoVeXZIP(nn.Module):
     def __init__(self):
         super(GeoVeXZIP, self).__init__()
@@ -18,32 +20,17 @@ class GeoVeXZIP(nn.Module):
         return pi, lambda_
 
 
-# class GeoVeXDecoder(nn.Module):
-#     def __init__(self, input_size, output_size):
-#         super(GeoVeXDecoder, self).__init__()
-
-#         self.zip_layer = GeoVeXZIP()
-#         self.fc_pi = nn.Linear(input_size, output_size)
-#         self.fc_lambda = nn.Linear(input_size, output_size)
-
-#     def forward(self, h):
-#         g_pi = self.fc_pi(h)
-#         g_lambda = self.fc_lambda(h)
-
-#         pi, lambda_ = self.zip_layer(g_pi, g_lambda)
-
-#         return pi, lambda_
-
 def build_mask_funcs(R):
     def w_dist(i, j):
         r = max(abs(i - R), abs(j - R), abs(i - j))
         return 1 / (1 + r) if r <= R else 0
-    
+
     def w_num(i, j):
         r = max(abs(i - R), abs(j - R), abs(i - j))
         return 1 / (R * r) if r <= R and r > 0 else 1 if r == 0 else 0
 
     return w_dist, w_num
+
 
 class GeoVeXLoss(nn.Module):
     def __init__(self, R):
@@ -53,10 +40,12 @@ class GeoVeXLoss(nn.Module):
 
         M = 2 * self.R + 1
         self._w_dist_matrix = torch.tensor(
-            [[self._w_dist(i, j) for j in range(M)] for i in range(M)], dtype=torch.float32
+            [[self._w_dist(i, j) for j in range(M)] for i in range(M)],
+            dtype=torch.float32,
         )
         self._w_num_matrix = torch.tensor(
-            [[self._w_num(i, j) for j in range(M)] for i in range(M)], dtype=torch.float32
+            [[self._w_num(i, j) for j in range(M)] for i in range(M)],
+            dtype=torch.float32,
         )
 
     def forward(self, pi, lambda_, y):
@@ -184,7 +173,7 @@ class GeoVexModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x  = batch
+        x = batch
         pi, lambda_ = self(x)
         loss = self._loss.forward(pi, lambda_, x)
         self.log("validation_loss", loss, on_step=True, on_epoch=True)
