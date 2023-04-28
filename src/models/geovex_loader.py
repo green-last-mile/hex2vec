@@ -34,6 +34,7 @@ class GeoVexLoader(Dataset):
             anchor = np.array(h3.cell_to_local_ij(h3_index, h3_index))
             self._valid_h3.append(
                 (
+                    h3_index,
                     data.index.get_loc(h3_index),
                     [
                         # get the index of the h3 in the dataset
@@ -58,7 +59,10 @@ class GeoVexLoader(Dataset):
 
     def __getitem__(self, index):
         # construct the 3d tensor
-        target_idx, neighbors_idxs = self._valid_h3[index]
+        h3_index, target_idx, neighbors_idxs = self._valid_h3[index]
+        return self._build_tensor(target_idx, neighbors_idxs)
+
+    def _build_tensor(self, target_idx, neighbors_idxs):
         # build the 3d tensor
         # it is a tensor with diagonals of length neighbor_k_ring
         # the diagonals are the neighbors of the target h3
@@ -87,6 +91,16 @@ class GeoVexLoader(Dataset):
         # return the tensor and the target (which is same as the tensor)
         # should we return the target as a copy of the tensor?
         return tensor
+
+
+    def full_dataset(self):
+        h3s = []
+        tensors = []
+        for h3_, target_idx, neighbors_idxs in tqdm(self._valid_h3, total=len(self._valid_h3)):
+            h3s.append(h3_)
+            tensors.append(self._build_tensor(target_idx, neighbors_idxs))
+        
+        return h3s, torch.stack(tensors)
 
     @property
     def shape(

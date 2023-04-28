@@ -10,16 +10,6 @@ from torchmetrics.functional import f1_score as f1
 # This is based on https://openreview.net/forum?id=7bvWopYY1H
 
 
-class GeoVeXZIP(nn.Module):
-    def __init__(self):
-        super(GeoVeXZIP, self).__init__()
-
-    def forward(self, x):
-        pi = torch.sigmoid(x)
-        lambda_ = torch.exp(x)
-        return pi, lambda_
-
-
 def build_mask_funcs(R):
     def w_dist(i, j):
         r = max(abs(i - R), abs(j - R), abs(i - j))
@@ -49,15 +39,16 @@ class GeoVeXLoss(nn.Module):
         )
 
     def forward(self, pi, lambda_, y):
-        M = 2 * self.R + 1
-        K = pi.size(1)
-
         I0 = (y == 0).float()
         I_greater_0 = (y > 0).float()
 
-        log_likelihood_0 = I0 * torch.log(pi + (1 - pi) * torch.exp(-lambda_))
+        # torch.exp(-1 * lambda_) instead of torch.exp(lambda_). the paper has a typo, I think...
+        log_likelihood_0 = I0 * torch.log(pi + (1 - pi) * torch.exp(-1 * lambda_))
         log_likelihood_greater_0 = I_greater_0 * (
-            torch.log(1 - pi) - lambda_ + y * torch.log(lambda_) - torch.lgamma(y + 1)
+            torch.log(1 - pi)
+            - lambda_
+            + y * torch.log(lambda_)
+            - torch.lgamma(y + 1)  # this is the ln(factorial(y))
         )
 
         log_likelihood = log_likelihood_0 + log_likelihood_greater_0
@@ -70,13 +61,14 @@ class GeoVeXLoss(nn.Module):
 
 class HexagonalConv2d(nn.Module):
     def __init__(
-        self, in_channels, out_channels, kernel_size=3, stride=2, padding=0, bias=True
+        self, in_channels, out_channels, kernel_size=3, stride=2, padding=0, bias=True, groups=1
     ):
         super(HexagonalConv2d, self).__init__()
         self.conv = nn.Conv2d(
-            in_channels, out_channels, kernel_size, stride, padding, bias=bias
+            in_channels, out_channels, kernel_size, stride, padding, bias=bias, groups=groups
         )
         self.register_buffer("hexagonal_mask", self.create_hexagonal_mask())
+        # relu is applied after the transpose convolution
 
     def create_hexagonal_mask(self):
         mask = torch.tensor([[0, 1, 1], [1, 1, 1], [1, 1, 0]], dtype=torch.float32)
@@ -130,36 +122,81 @@ class Reshape(nn.Module):
         return x.view(self.shape)
 
 
+class GeoVeXZIP(nn.Module):
+    def __init__(self, in_dim, r, out_dim):
+        super(GeoVeXZIP, self).__init__()
+
+        # comes in as (batch_size, k_dim, R, R)
+        self.in_dim = in_dim
+        self.R = r
+        self.out_dim = out_dim
+        self.pi = nn.Linear(in_dim, out_dim)
+        self.lambda_ = nn.Linear(in_dim, out_dim)
+
+    def forward(self, x):
+        _x = x.view(-1, self.R, self.R, self.in_dim)
+        pi = torch.sigmoid(self.pi(_x))
+        lambda_ = torch.exp(self.lambda_(_x))
+        return (
+            pi.view(-1, self.out_dim, self.R, self.R, ), 
+            lambda_.view(-1, self.out_dim, self.R, self.R, )
+        )
+    
+
 class GeoVexModel(pl.LightningModule):
-    def __init__(self, k_dim, R, lr=1e-3, weight_decay=1e-5):
+    def __init__(self, k_dim, R, lr=1e-5, weight_decay=1e-5):
         super().__init__()
 
         self.k_dim = k_dim
         self.R = R
         self.lr = lr
+        self.weight_decay = weight_decay
 
-        num_conv = 2
-        lin_size = self.R // (2 ** num_conv)
+        num_conv = 1
+        lin_size = 4  # self.R // (2 ** num_conv)
 
         self.encoder = nn.Sequential(
             nn.BatchNorm2d(self.k_dim),
             nn.ReLU(),
-            HexagonalConv2d(self.k_dim, 256, kernel_size=3, stride=1),
+            # nn.Conv1d(self.k_dim, 256, kernel_size=3, stride=2),
+            # have to add padding to preserve the input size
+            HexagonalConv2d(self.k_dim, 256, kernel_size=3, stride=2, padding=5),
+            # # HexagonalConv2d(self.k_dim, 256, kernel_size=3, stride=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
             HexagonalConv2d(256, 512, kernel_size=3, stride=2),
-            HexagonalConv2d(512, 1024, kernel_size=3, stride=2),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+            # HexagonalConv2d(256, 1024, kernel_size=3, stride=2),
+            # nn.BatchNorm2d(1024),
+            # nn.ReLU(),
             nn.Flatten(),
-            # TODO: make this a function of R
-            nn.Linear(lin_size * lin_size * 1024, 32),
+            # # TODO: make this a function of R
+            nn.Linear(lin_size * lin_size * 512, 32),
         )
 
         self.decoder = nn.Sequential(
-            nn.Linear(32, lin_size * lin_size * 1024),
+            nn.Linear(32, lin_size * lin_size * 512),
             # maintain the batch size, but reshape the rest
-            Reshape((-1, 1024, lin_size, lin_size)),
-            HexagonalConvTranspose2d(1024, 512, kernel_size=3, stride=2),
+            Reshape((-1, 512, lin_size, lin_size)),
+            # HexagonalConvTranspose2d(1024, 512, kernel_size=3, stride=2),
+            # HexagonalConvTranspose2d(512, 256, kernel_size=3, stride=2),
+            # nn.BatchNorm2d(256),
+            # nn.ReLU(),
             HexagonalConvTranspose2d(512, 256, kernel_size=3, stride=2),
-            HexagonalConvTranspose2d(256, self.k_dim, kernel_size=3, stride=1),
-            GeoVeXZIP(),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            # HexagonalConvTranspose2d(256, 256, kernel_size=3, stride=2),
+            # nn.BatchNorm2d(256),
+            # nn.ReLU(),
+            # HexagonalConvTranspose2d(256, self.k_dim, kernel_size=3, stride=2),
+            # nn.BatchNorm2d(self.k_dim),
+            # nn.ReLU(),
+            # nn.ReLU(),
+            # ,
+            # nn.BatchNorm2d(self.k_dim),
+            # nn.ReLU(),
+            GeoVeXZIP(256, self.R * 2 + 1, self.k_dim),
         )
 
         self._loss = GeoVeXLoss(self.R)
@@ -184,4 +221,22 @@ class GeoVexModel(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.0001)
+        # optim = torch.optim.lr_scheduler.OneCycleLR(
+        #     torch.optim.Adam(self.parameters(), lr=self.lr * 0.01),
+        #     max_lr=self.lr,
+        #     anneal_strategy="cos",
+        #     steps_per_epoch=100,
+        #     epochs=100,
+        # )
+        optimizer = torch.optim.Adam(
+            self.parameters(),
+            lr=self.lr,
+        )
+        # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+        #     optimizer,
+        #     gamma=0.99,
+        #     verbose=True,
+        # )
+        # return [optimizer], [lr_scheduler]
+        return optimizer
+        # return optim
