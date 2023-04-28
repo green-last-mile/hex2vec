@@ -22,7 +22,7 @@ class H3NeighborDataset(Dataset):
         for i, (h3_index, hex_data) in tqdm(
             enumerate(self.data.iterrows()), total=len(self.data)
         ):
-            hex_neighbors_h3 = h3.k_ring(h3_index, neighbor_k_ring)
+            hex_neighbors_h3 = h3.grid_disk(h3_index, neighbor_k_ring)
             hex_neighbors_h3.remove(h3_index)
             available_neighbors_h3 = list(hex_neighbors_h3.intersection(all_indices))
 
@@ -30,7 +30,7 @@ class H3NeighborDataset(Dataset):
                 self.data.index.get_loc(idx) for idx in available_neighbors_h3
             ]
 
-            negative_excluded_h3 = h3.k_ring(h3_index, dead_k_ring)
+            negative_excluded_h3 = h3.grid_disk(h3_index, dead_k_ring)
             negative_excluded_h3 = list(negative_excluded_h3.intersection(all_indices))
             positive_indexes = [
                 self.data.index.get_loc(idx) for idx in negative_excluded_h3
@@ -104,7 +104,7 @@ class H3NeighborDatasetCity(H3NeighborDataset):
             ):
                 
                 #  creaet a list of all the neighbors of the current hexagon
-                hex_neighbors_h3 = h3.k_ring(h3_index, neighbor_k_ring)
+                hex_neighbors_h3 = h3.grid_disk(h3_index, neighbor_k_ring)
                 hex_neighbors_h3.remove(h3_index)
 
                 #  remove all the neighbors that are not in the current city
@@ -115,7 +115,7 @@ class H3NeighborDatasetCity(H3NeighborDataset):
                     self.data.index.get_loc(idx) for idx in available_neighbors_h3
                 ]
 
-                negative_excluded_h3 = h3.k_ring(h3_index, dead_k_ring)
+                negative_excluded_h3 = h3.grid_disk(h3_index, dead_k_ring)
                 negative_excluded_h3 = list(negative_excluded_h3.intersection(all_indices))
                 positive_indexes = [
                     self.data.index.get_loc(idx) for idx in negative_excluded_h3
@@ -153,7 +153,7 @@ class H3DistanceDataset(Dataset):
         }
 
         # self.neighbor_map = {
-        #     h3_index: h3.k_ring(h3_index, max_distance).intersection(self.data.index) for h3_index in self.data.index
+        #     h3_index: h3.grid_disk(h3_index, max_distance).intersection(self.data.index) for h3_index in self.data.index
         # }
 
         self._k = max_distance
@@ -172,7 +172,7 @@ class H3DistanceDataset(Dataset):
         if np.random.random() < 0.1:
             # h3_d = np.random.choice(list(neighbors))
             # get the 
-            neighbors = h3.k_ring(h3_target, self._k).intersection(self.index_list)
+            neighbors = h3.grid_disk(h3_target, self._k).intersection(self.index_list)
             h3_d = np.random.choice(list(neighbors))
 
         else:

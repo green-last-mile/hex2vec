@@ -113,7 +113,7 @@ class NearestNeighbor:
         # start at center and then ring around
         tmp = point_array.to_crs(self._utm_proj.crs).copy(deep=True)
         center = tmp.y.mean(), tmp.x.mean()
-        center_hex = h3.geo_to_h3(
+        center_hex = h3.latlng_to_cell(
             *self._get_utm_coords(*center, inverse=True)[::-1], self._h3_level
         )
         t_list = [center_hex]
@@ -136,7 +136,7 @@ class NearestNeighbor:
                 if found:
                     break
 
-            for n in h3.k_ring(h):
+            for n in h3.grid_disk(h):
                 if n in to_visit:
                     t_list.append(n)
                     found = True
@@ -155,7 +155,7 @@ class NearestNeighbor:
             hexes: List of hexagons
             center_hex: Center hexagon
         """
-        neighbors = h3.k_ring(center_hex, 1)
+        neighbors = h3.grid_disk(center_hex, 1)
         self._visited_hexes = {
             hex_id: self._visited_hexes[hex_id]
             for hex_id in self._visited_hexes.keys()
@@ -315,7 +315,7 @@ class NearestNeighbor:
         if non_contained > 0:
             neighbors = [
                 (h3_id, self._h3_to_utm_polygon(needed_hex[0][0]))
-                for h3_id in h3.k_ring(hex_id, 1)
+                for h3_id in h3.grid_disk(hex_id, 1)
             ]
 
             for neighbor in neighbors:
@@ -361,7 +361,7 @@ class NearestNeighbor:
 #     """
 #     Check if hexagon is big enough to contain circle centered on lat/lon. If not, return list of hex_ids that do.
 #     """
-#     neighbors = h3.k_ring(hex_id, 1)
+#     neighbors = h3.grid_disk(hex_id, 1)
 #     return [neighbor for neighbor in neighbors if h3_to_polygon(neighbor).intersects(circle)]
 
 

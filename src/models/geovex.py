@@ -39,6 +39,9 @@ class GeoVeXLoss(nn.Module):
         )
 
     def forward(self, pi, lambda_, y):
+        # trim the padding from y
+        y = y[:, :, :2 * self.R + 1,  :2 * self.R + 1]
+
         I0 = (y == 0).float()
         I_greater_0 = (y > 0).float()
 
@@ -136,21 +139,26 @@ class GeoVeXZIP(nn.Module):
     def forward(self, x):
         _x = x.view(-1, self.R, self.R, self.in_dim)
         pi = torch.sigmoid(self.pi(_x))
-        lambda_ = torch.exp(self.lambda_(_x))
-        return (
-            pi.view(-1, self.out_dim, self.R, self.R, ), 
-            lambda_.view(-1, self.out_dim, self.R, self.R, )
-        )
+        # clamp pi to avoid nan's
+        pi = pi.view(-1, self.out_dim, self.R, self.R,)
+        lambda_ = torch.exp(self.lambda_(_x)).view(-1, self.out_dim, self.R, self.R,)
+
+        # pad by 1 on the right and bottom
+        # pi = F.pad(pi, (0, 1, 0, 1), mode="constant", value=1e-5)
+        # lambda_ = F.pad(lambda_, (0, 1, 0, 1), mode="constant", value=0)
+        pi = torch.clamp(pi, 1e-5, 1 - 1e-5)
+        return pi, lambda_
     
 
 class GeoVexModel(pl.LightningModule):
-    def __init__(self, k_dim, R, lr=1e-5, weight_decay=1e-5):
+    def __init__(self, k_dim, R, emb_size=32, lr=1e-5, weight_decay=1e-5):
         super().__init__()
 
         self.k_dim = k_dim
         self.R = R
         self.lr = lr
         self.weight_decay = weight_decay
+        self.emb_size = emb_size
 
         num_conv = 1
         lin_size = 4  # self.R // (2 ** num_conv)
@@ -160,30 +168,30 @@ class GeoVexModel(pl.LightningModule):
             nn.ReLU(),
             # nn.Conv1d(self.k_dim, 256, kernel_size=3, stride=2),
             # have to add padding to preserve the input size
-            HexagonalConv2d(self.k_dim, 256, kernel_size=3, stride=2, padding=5),
+            HexagonalConv2d(self.k_dim, 256, kernel_size=3, stride=2, padding=6),
             # # HexagonalConv2d(self.k_dim, 256, kernel_size=3, stride=1),
             nn.BatchNorm2d(256),
             nn.ReLU(),
             HexagonalConv2d(256, 512, kernel_size=3, stride=2),
             nn.BatchNorm2d(512),
             nn.ReLU(),
-            # HexagonalConv2d(256, 1024, kernel_size=3, stride=2),
+            # HexagonalConv2d(512, 1024, kernel_size=3, stride=2),
             # nn.BatchNorm2d(1024),
             # nn.ReLU(),
             nn.Flatten(),
-            # # TODO: make this a function of R
-            nn.Linear(lin_size * lin_size * 512, 32),
+            # # # TODO: make this a function of R
+            nn.Linear(lin_size * lin_size * 512, self.emb_size),
         )
 
         self.decoder = nn.Sequential(
-            nn.Linear(32, lin_size * lin_size * 512),
+            nn.Linear(self.emb_size, lin_size * lin_size * 512),
             # maintain the batch size, but reshape the rest
             Reshape((-1, 512, lin_size, lin_size)),
             # HexagonalConvTranspose2d(1024, 512, kernel_size=3, stride=2),
-            # HexagonalConvTranspose2d(512, 256, kernel_size=3, stride=2),
-            # nn.BatchNorm2d(256),
+            # # HexagonalConvTranspose2d(512, 256, kernel_size=3, stride=2),
+            # nn.BatchNorm2d(512),
             # nn.ReLU(),
-            HexagonalConvTranspose2d(512, 256, kernel_size=3, stride=2),
+            HexagonalConvTranspose2d(512, 256, kernel_size=3, stride=2, ),
             nn.BatchNorm2d(256),
             nn.ReLU(),
             # HexagonalConvTranspose2d(256, 256, kernel_size=3, stride=2),
@@ -221,22 +229,24 @@ class GeoVexModel(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        # optim = torch.optim.lr_scheduler.OneCycleLR(
-        #     torch.optim.Adam(self.parameters(), lr=self.lr * 0.01),
-        #     max_lr=self.lr,
-        #     anneal_strategy="cos",
-        #     steps_per_epoch=100,
-        #     epochs=100,
-        # )
         optimizer = torch.optim.Adam(
             self.parameters(),
             lr=self.lr,
+            # weight_decay=self.weight_decay,
+        )
+        lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=self.lr * 10,
+            anneal_strategy="cos",
+            steps_per_epoch=20,
+            epochs=100,
+            verbose=True,
         )
         # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
         #     optimizer,
-        #     gamma=0.99,
+        #     gamma=0.98,
         #     verbose=True,
         # )
-        # return [optimizer], [lr_scheduler]
-        return optimizer
+        return [optimizer], [lr_scheduler]
+        # return optimizer
         # return optim

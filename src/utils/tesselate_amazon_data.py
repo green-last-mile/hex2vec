@@ -233,7 +233,7 @@ def join_hex_dfs(
         # This is because the children are not always geographically contained.
         needed_hexes = [
             hex_id,
-            *[hex_parent_dir / h for h in h3.k_ring(hex_id.stem, 1)],
+            *[hex_parent_dir / h for h in h3.grid_disk(hex_id.stem, 1)],
         ]
 
         # create a list of the buffered boundary hexagons. It's not necessary to have the neighbors of these hexagons.
@@ -506,7 +506,7 @@ def get_buffer_hexes(
     reported_hex = set()
     for hex in hexes:
         # find the missing and add them
-        if missing := h3.k_ring(hex, 1) - hexes:
+        if missing := h3.grid_disk(hex, 1) - hexes:
             for _h in missing:
                 reported_hex.add(_h)
 

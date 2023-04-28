@@ -68,12 +68,12 @@ class GeoVexLoader(Dataset):
         # the diagonals are the neighbors of the target h3
         # the target h3 is in the center of the tensor
         # the tensor is 2*neighbor_k_ring + 1 x 2*neighbor_k_ring + 1 x 2*neighbor_k_ring + 1
-        # make a tensor of zeros
+        # make a tensor of zeros, padded by 1 zero all around to make it even for the convolutions
         tensor = torch.zeros(
             (
                 self._N,
-                2 * self._k + 1,
-                2 * self._k + 1,
+                2 * self._k + 2,
+                2 * self._k + 2,
             )
         )
 
@@ -87,6 +87,7 @@ class GeoVexLoader(Dataset):
         # set the neighbors of the target h3 to the diagonals of the tensor
         for neighbor_idx, (i, j) in neighbors_idxs:
             tensor[:, self._k + i, self._k + j] = self._data_torch[neighbor_idx]
+
 
         # return the tensor and the target (which is same as the tensor)
         # should we return the target as a copy of the tensor?

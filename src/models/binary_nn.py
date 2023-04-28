@@ -17,6 +17,9 @@ class BinaryNN(pl.LightningModule):
                 linear = nn.Linear(input_size, output_size)
                 nn.init.xavier_uniform_(linear.weight)
                 layers.append(nn.Linear(input_size, output_size))
+                if i == 0:
+                    # added batch normalization to the first layer
+                    layers.append(nn.BatchNorm1d(output_size))
                 if i != len(sizes) - 1:
                     layers.append(nn.ReLU())
             return nn.Sequential(*layers)
@@ -38,7 +41,7 @@ class BinaryNN(pl.LightningModule):
         scores_neg = self(Xt, Xn)
 
         scores = torch.cat([scores_pos, scores_neg])
-        y = torch.cat([y_pos, y_neg])
+        y = torch.cat([y_pos, y_neg]).to(Xt)
 
         loss = F.binary_cross_entropy_with_logits(scores, y)
         f_score = f1(sigmoid(scores), y.int(), task="binary")
@@ -52,7 +55,7 @@ class BinaryNN(pl.LightningModule):
         scores_neg = self(Xt, Xn)
 
         scores = torch.cat([scores_pos, scores_neg])
-        y = torch.cat([y_pos, y_neg])
+        y = torch.cat([y_pos, y_neg]).to(Xt)
 
         loss = F.binary_cross_entropy_with_logits(scores, y)
         f_score = f1(sigmoid(scores), y.int(), task="binary")
@@ -64,7 +67,23 @@ class BinaryNN(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=0.001)
 
 
-class DistanceNN(pl.LightningModule):
+
+class MultiHead(nn.Module):
+
+    def __init__(self, city_dims: Tuple[int], hex_dims: Tuple[int]) -> None:
+
+        self.city_l = nn.Linear(*city_dims)
+        self.hex_l = nn.Linear(*hex_dims)
+
+    def forward(self, x: torch.Tensor,) -> torch.Tensor:
+        city_emb = self.city_l(x)
+        hex_emb = self.hex_l(x)
+        return city_emb, hex_emb
+
+        
+
+
+class CityAwareNN(pl.LightningModule):
     def __init__(self, encoder_sizes, max_distance=10):
         super().__init__()
 
@@ -75,7 +94,7 @@ class DistanceNN(pl.LightningModule):
             for i, (input_size, output_size) in enumerate(sizes):
                 linear = nn.Linear(input_size, output_size)
                 nn.init.xavier_uniform_(linear.weight)
-                layers.append(nn.Linear(input_size, output_size))
+                layers.append(linear)
                 if i != len(sizes) - 1:
                     layers.append(nn.ReLU())
             return nn.Sequential(*layers)
