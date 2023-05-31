@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 
 class H3NeighborDataset(Dataset):
+
     def __init__(self, data: pd.DataFrame, neighbor_k_ring=1, dead_k_ring=2):
         self.data = data
         self.data_torch = torch.Tensor(self.data.to_numpy(dtype=np.float32))
@@ -75,6 +76,47 @@ class H3NeighborDataset(Dataset):
     @property
     def shape(self, ) -> int:
         return self.data_torch.shape
+
+
+
+class H3ClusterNeighbor(H3NeighborDataset):
+
+    def __init__(self, data: pd.DataFrame, cluster_labels: pd.Series, ):
+        self.data = data
+        self.data_torch = torch.Tensor(self.data.to_numpy(dtype=np.float32))
+        self.cluster_labels = cluster_labels
+        self.h3s = self.data.index.copy()
+
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, index):
+        input_ = self.data_torch[index]
+        label_ = self.cluster_labels[index]
+
+        context_index = self._get_random(label_, pos=True)
+        context = self.data_torch[context_index]
+        y_pos = 1.0
+
+        negative_index = self._get_random(label_, pos=False)
+        negative = self.data_torch[negative_index]
+        y_neg = 0.0
+
+        return input_, context, negative, y_pos, y_neg, self.h3s[index], self.h3s[context_index], self.h3s[negative_index]
+
+
+    def _get_random(self, label, pos=True):
+        positive_indexes = self.cluster_labels[(self.cluster_labels == label) if pos else (self.cluster_labels != label)].index
+        positive_index = np.random.choice(positive_indexes)
+        return positive_index
+
+    
+
+
+
+        
+
+    
 
 
 class H3NeighborDatasetCity(H3NeighborDataset):

@@ -370,7 +370,7 @@ def pull_all(output_dir, latlon_csv, city, city_file, level, convex_hull, tag) -
         latlon = pd.read_csv(latlon_csv)
         # add in the h3 index
         latlon["h3"] = latlon[["lat", "lng"]].apply(
-            lambda x: h3.geo_to_h3(x[0], x[1], level), raw=True, axis=1
+            lambda x: h3.latlng_to_cell(x[0], x[1], level), raw=True, axis=1
         )
 
         # drop individual lat/lons, just keep unique h3s, cities, and geometries
