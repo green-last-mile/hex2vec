@@ -238,8 +238,8 @@ class GeoVexModel(pl.LightningModule):
             optimizer,
             max_lr=self.lr * 10,
             anneal_strategy="cos",
-            steps_per_epoch=20,
-            epochs=100,
+            steps_per_epoch=5,
+            epochs=25,
             verbose=True,
         )
         # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(

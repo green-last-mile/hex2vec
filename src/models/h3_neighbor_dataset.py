@@ -108,7 +108,7 @@ class H3ClusterNeighbor(H3NeighborDataset):
     def _get_random(self, label, pos=True):
         positive_indexes = self.cluster_labels[(self.cluster_labels == label) if pos else (self.cluster_labels != label)].index
         positive_index = np.random.choice(positive_indexes)
-        return positive_index
+        return self.h3s.get_loc(positive_index)
 
     
 
